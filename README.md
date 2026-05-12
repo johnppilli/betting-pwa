@@ -1,47 +1,50 @@
-# Svelte + TS + Vite
+# Betting PWA
 
-This template should help get you started developing with Svelte and TypeScript in Vite.
+NBA betting prediction app — pulls live odds from The Odds API and surfaces the most-likely outcomes using consensus de-vig probability across bookmakers. Installable on iPhone/Android as a PWA (Add to Home Screen).
 
-## Recommended IDE Setup
+Built with **Svelte 5 + TypeScript + Vite + Tailwind v4**. Deployed on **Vercel** with a tiny serverless function proxying The Odds API so the key stays server-side.
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
+## Local development
 
-## Need an official Svelte framework?
+You need Node 20+ and a free Odds API key from [the-odds-api.com](https://the-odds-api.com).
 
-Check out [SvelteKit](https://github.com/sveltejs/kit#readme), which is also powered by Vite. Deploy anywhere with its serverless-first approach and adapt to various platforms, with out of the box support for TypeScript, SCSS, and Less, and easily-added support for mdsvex, GraphQL, PostCSS, Tailwind CSS, and more.
+```bash
+# 1. Install deps
+npm install
 
-## Technical considerations
+# 2. Create .env.local with your key
+echo "VITE_ODDS_API_KEY=your_key_here" > .env.local
 
-**Why use this over SvelteKit?**
-
-- It brings its own routing solution which might not be preferable for some users.
-- It is first and foremost a framework that just happens to use Vite under the hood, not a Vite app.
-
-This template contains as little as possible to get started with Vite + TypeScript + Svelte, while taking into account the developer experience with regards to HMR and intellisense. It demonstrates capabilities on par with the other `create-vite` templates and is a good starting point for beginners dipping their toes into a Vite + Svelte project.
-
-Should you later need the extended capabilities and extensibility provided by SvelteKit, the template has been structured similarly to SvelteKit so that it is easy to migrate.
-
-**Why `global.d.ts` instead of `compilerOptions.types` inside `jsconfig.json` or `tsconfig.json`?**
-
-Setting `compilerOptions.types` shuts out all other types not explicitly listed in the configuration. Using triple-slash references keeps the default TypeScript setting of accepting type information from the entire workspace, while also adding `svelte` and `vite/client` type information.
-
-**Why include `.vscode/extensions.json`?**
-
-Other templates indirectly recommend extensions via the README, but this file allows VS Code to prompt the user to install the recommended extension upon opening the project.
-
-**Why enable `allowJs` in the TS template?**
-
-While `allowJs: false` would indeed prevent the use of `.js` files in the project, it does not prevent the use of JavaScript syntax in `.svelte` files. In addition, it would force `checkJs: false`, bringing the worst of both worlds: not being able to guarantee the entire codebase is TypeScript, and also having worse typechecking for the existing JavaScript. In addition, there are valid use cases in which a mixed codebase may be relevant.
-
-**Why is HMR not preserving my local component state?**
-
-HMR state preservation comes with a number of gotchas! It has been disabled by default in both `svelte-hmr` and `@sveltejs/vite-plugin-svelte` due to its often surprising behavior. You can read the details [here](https://github.com/rixo/svelte-hmr#svelte-hmr).
-
-If you have state that's important to retain within a component, consider creating an external store which would not be replaced by HMR.
-
-```ts
-// store.ts
-// An extremely simple external store
-import { writable } from 'svelte/store'
-export default writable(0)
+# 3. Run dev server (binds 0.0.0.0 so you can hit it from your phone over LAN)
+./node_modules/.bin/vite --host 0.0.0.0 --port 5173
 ```
+
+Open <http://localhost:5173>.
+
+## Production deploy (Vercel)
+
+1. Push the repo to GitHub.
+2. Go to <https://vercel.com> → New Project → import the repo.
+3. In **Environment Variables**, add: `ODDS_API_KEY = your_key_here` *(note: no `VITE_` prefix — this keeps the key server-side only).*
+4. Click Deploy. Vercel auto-detects Vite and builds in ~30 seconds.
+
+Once deployed, the URL works on any network (cell, home Wi-Fi, school Wi-Fi). Open it in Safari on iPhone → Share → Add to Home Screen to install.
+
+## What it shows
+
+- **Games** — today's NBA matchups with spreads, totals, and moneyline. Each card shows a model pick + confidence percentage.
+- **Props** — player points/rebounds/assists/threes per game, with the favored Over/Under highlighted.
+- **Top Picks** — strongest plays across all games and props, sorted by confidence, color-coded by tier.
+- **Settings** — placeholder for now.
+
+## The math (Section 3a)
+
+Each bookmaker bakes their margin (the "vig") into the odds. If you average the raw implied probabilities across multiple books, the result is > 100% — that excess **is** the vig. After normalizing, you get the market's true probability for each outcome. The Top Picks page surfaces anything ≥ 52% confidence after this adjustment. See `src/lib/predict/probability.ts`.
+
+## Roadmap
+
+- [x] Section 1 — PWA shell, bottom nav, dark theme
+- [x] Section 2 — live Odds API integration with caching
+- [x] Section 3a — consensus probability predictions
+- [x] Section 4 — PWA polish + Vercel deploy with API proxy
+- [ ] Section 3b — fancier prop model using player game logs (planned)
