@@ -3,6 +3,9 @@
   import { getCached, setCached, cacheAge } from '../lib/api/cache';
   import { americanOdds, tipoffTime, shortAge } from '../lib/format';
   import { consensusProbabilities, favoredSide, pct } from '../lib/predict/probability';
+  import { findPlayerId, fetchRecentStats, type BdlStat } from '../lib/api/stats';
+  import { modelProbability } from '../lib/predict/playerModel';
+  import PropPlayerSkeleton from '../lib/components/PropPlayerSkeleton.svelte';
 
   const GAMES_CACHE = 'nba-odds';
   const TTL_MS = 10 * 60 * 1000;
@@ -13,6 +16,9 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let updatedAgo = $state<number | null>(null);
+  // Background-fetched balldontlie stats per player name. Populated as
+  // requests resolve. Missing key = not loaded; empty array = no data found.
+  let playerStats = $state<Record<string, BdlStat[]>>({});
 
   const STAT_LABELS: Record<string, string> = {
     player_points: 'Points',
@@ -66,6 +72,10 @@
       }
       propsEvent = p;
       updatedAgo = cacheAge(cacheKey);
+      // Kick off background stats fetches for every player in the props.
+      // Runs in parallel; if balldontlie rate-limits some, those just won't
+      // show a Model badge — the Market badge still works.
+      loadAllPlayerStats(p);
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load props';
     } finally {
@@ -73,10 +83,35 @@
     }
   }
 
+  async function loadAllPlayerStats(event: OddsEvent) {
+    const names = new Set<string>();
+    for (const bk of event.bookmakers) {
+      for (const m of bk.markets) {
+        for (const o of m.outcomes) {
+          if (o.description) names.add(o.description);
+        }
+      }
+    }
+
+    await Promise.allSettled(
+      [...names].map(async (name) => {
+        try {
+          const id = await findPlayerId(name);
+          if (!id) return;
+          const stats = await fetchRecentStats(id);
+          playerStats = { ...playerStats, [name]: stats };
+        } catch {
+          // ignore per-player failures (rate limit, network) — just no Model badge
+        }
+      })
+    );
+  }
+
   function selectGame(id: string) {
     if (id === selectedId) return;
     selectedId = id;
     propsEvent = null;
+    playerStats = {};
     loadProps(id);
   }
 
@@ -146,6 +181,23 @@
   }
 
   let players = $derived(groupByPlayer(propsEvent));
+
+  // Model probability for the favored side, given a line + that player's stats.
+  // Returns null when we don't yet have stats or the sample is too small.
+  function lineModelProb(
+    playerName: string,
+    marketKey: string,
+    lineValue: number,
+    favored: 'Over' | 'Under' | null
+  ): number | null {
+    const stats = playerStats[playerName];
+    if (!stats) return null;
+    const result = modelProbability(stats, marketKey, lineValue);
+    if (!result) return null;
+    if (favored === 'Over') return result.pOver;
+    if (favored === 'Under') return 1 - result.pOver;
+    return Math.max(result.pOver, 1 - result.pOver);
+  }
 </script>
 
 <header class="mb-4">
@@ -172,9 +224,11 @@
 {/if}
 
 {#if loading && !propsEvent}
-  <div class="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 text-center text-neutral-400">
-    Loading props...
-  </div>
+  <section class="space-y-3">
+    {#each Array(3) as _, i (i)}
+      <PropPlayerSkeleton />
+    {/each}
+  </section>
 {:else if error}
   <div class="rounded-2xl border border-red-900 bg-red-950/40 p-4 text-red-300">
     <p class="text-sm font-medium">Couldn't load props</p>
@@ -198,6 +252,7 @@
         <h2 class="mb-3 text-sm font-medium text-neutral-100">{player.name}</h2>
         <div class="space-y-2">
           {#each player.lines as line (line.stat + line.line)}
+            {@const modelP = lineModelProb(player.name, line.marketKey, line.line, line.favored)}
             <div class="flex items-center justify-between text-xs">
               <span class="text-neutral-400">
                 {line.stat}
@@ -210,9 +265,21 @@
                 <span class="rounded-md px-2 py-1 {line.favored === 'Under' ? 'bg-orange-500/15 text-orange-200 ring-1 ring-orange-500/30' : 'bg-neutral-800 text-neutral-300'}">
                   U <span class="ml-1 text-neutral-500">{americanOdds(line.under)}</span>
                 </span>
-                {#if line.favoredProb !== null}
-                  <span class="ml-1 font-mono text-orange-300">{pct(line.favoredProb)}</span>
-                {/if}
+                <div class="ml-1 flex flex-col items-end text-[10px] leading-tight">
+                  {#if line.favoredProb !== null}
+                    <span class="font-mono text-orange-300" title="Market consensus probability">
+                      Mkt {pct(line.favoredProb)}
+                    </span>
+                  {/if}
+                  {#if modelP !== null}
+                    <span
+                      class="font-mono {modelP >= 0.55 ? 'text-cyan-300' : 'text-neutral-500'}"
+                      title="Player-stat model probability (recent games)"
+                    >
+                      Mdl {pct(modelP)}
+                    </span>
+                  {/if}
+                </div>
               </div>
             </div>
           {/each}

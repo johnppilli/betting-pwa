@@ -3,6 +3,8 @@
   import { getCached, setCached, cacheAge } from '../lib/api/cache';
   import { americanOdds, signedPoint, tipoffTime, teamAbbr, shortAge } from '../lib/format';
   import { favoredOutcome, pct } from '../lib/predict/probability';
+  import { teamColors, matchupGradient } from '../lib/teams';
+  import GameCardSkeleton from '../lib/components/GameCardSkeleton.svelte';
 
   const CACHE_KEY = 'nba-odds';
   const TTL_MS = 10 * 60 * 1000;
@@ -79,9 +81,11 @@
 </header>
 
 {#if loading && !games}
-  <div class="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 text-center text-neutral-400">
-    Loading games...
-  </div>
+  <section class="space-y-3">
+    {#each Array(3) as _, i (i)}
+      <GameCardSkeleton />
+    {/each}
+  </section>
 {:else if error}
   <div class="rounded-2xl border border-red-900 bg-red-950/40 p-4 text-red-300">
     <p class="text-sm font-medium">Couldn't load games</p>
@@ -98,7 +102,9 @@
       {@const mlPick = favoredOutcome(game, 'h2h')}
       {@const spreadPick = favoredOutcome(game, 'spreads')}
       {@const totalPick = favoredOutcome(game, 'totals')}
-      <article class="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4">
+      <article class="overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900/60">
+        <div class="h-1" style="background: {matchupGradient(game.away_team, game.home_team)}"></div>
+        <div class="p-4">
         <div class="mb-3 flex items-center justify-between text-xs text-neutral-500">
           <span>{tipoffTime(game.commence_time)}</span>
           <span>{game.bookmakers[0]?.title ?? '—'}</span>
@@ -120,8 +126,10 @@
           {#each [game.away_team, game.home_team] as team}
             {@const spread = spreadFor(game, team)}
             {@const ml = mlFor(game, team)}
+            {@const c = teamColors(team)}
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-3">
+                <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style="background: {c.primary}"></span>
                 <span class="inline-block w-10 font-mono text-xs text-neutral-500">{teamAbbr(team)}</span>
                 <span class="text-sm text-neutral-200">{team}</span>
               </div>
@@ -169,6 +177,7 @@
               {/if}
             </div>
           {/if}
+        </div>
         </div>
       </article>
     {/each}

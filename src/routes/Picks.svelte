@@ -3,6 +3,8 @@
   import { getCached, setCached, cacheAge } from '../lib/api/cache';
   import { consensusProbabilities, favoredSide, pct } from '../lib/predict/probability';
   import { signedPoint, tipoffTime, teamAbbr, shortAge } from '../lib/format';
+  import { settings } from '../lib/settings';
+  import PickRowSkeleton from '../lib/components/PickRowSkeleton.svelte';
 
   const GAMES_CACHE = 'nba-odds';
   const TTL_MS = 10 * 60 * 1000;
@@ -24,7 +26,12 @@
     prob: number;          // de-vigged consensus
   }
 
-  let picks = $state<Pick[]>([]);
+  let allPicks = $state<Pick[]>([]);
+  let picks = $derived(
+    allPicks
+      .filter((p) => p.prob >= $settings.pickThreshold)
+      .sort((a, b) => b.prob - a.prob)
+  );
   let loading = $state(true);
   let error = $state<string | null>(null);
   let updatedAgo = $state<number | null>(null);
@@ -131,10 +138,8 @@
         }
       }
 
-      // Sort by probability descending, dedupe near-50% noise
-      picks = collected
-        .filter((p) => p.prob >= 0.52)
-        .sort((a, b) => b.prob - a.prob);
+      // Sort + filter happen reactively in $derived above
+      allPicks = collected;
       updatedAgo = cacheAge(GAMES_CACHE);
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load';
@@ -161,9 +166,11 @@
 </header>
 
 {#if loading}
-  <div class="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 text-center text-neutral-400">
-    Crunching today's lines...
-  </div>
+  <section class="space-y-2">
+    {#each Array(6) as _, i (i)}
+      <PickRowSkeleton />
+    {/each}
+  </section>
 {:else if error}
   <div class="rounded-2xl border border-red-900 bg-red-950/40 p-4 text-red-300">
     <p class="text-sm font-medium">Couldn't load picks</p>
