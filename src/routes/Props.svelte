@@ -208,7 +208,15 @@
           .map((mk) => Object.values(p.lines).find((l) => l.marketKey === mk))
           .filter((l): l is PropLine => !!l)
       }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => {
+        // Stars first: sort by sum of all prop lines (Points + Rebounds +
+        // Assists + Threes). Bookmakers set higher lines for star players,
+        // so Edwards (26.5 pts) sorts above Dosunmu (12.5 pts) automatically.
+        const aStar = a.lines.reduce((s, l) => s + l.line, 0);
+        const bStar = b.lines.reduce((s, l) => s + l.line, 0);
+        if (bStar !== aStar) return bStar - aStar;
+        return a.name.localeCompare(b.name);
+      });
   }
 
   let players = $derived(groupByPlayer(propsEvent));
@@ -246,16 +254,18 @@
 </header>
 
 {#if games && games.length > 1}
-  <div class="-mx-4 mb-4 overflow-x-auto px-4">
-    <div class="flex gap-2">
-      {#each games as g (g.id)}
-        <button
-          onclick={() => selectGame(g.id)}
-          class="shrink-0 rounded-full border px-3 py-1.5 text-xs whitespace-nowrap transition {selectedId === g.id ? 'border-orange-500 bg-orange-500/10 text-orange-300' : 'border-neutral-800 text-neutral-400 hover:bg-neutral-900'}"
-        >
-          {g.away_team} @ {g.home_team}
-        </button>
-      {/each}
+  <div class="-mx-4 mb-4 fade-right">
+    <div class="no-scrollbar overflow-x-auto px-4">
+      <div class="flex gap-2">
+        {#each games as g (g.id)}
+          <button
+            onclick={() => selectGame(g.id)}
+            class="shrink-0 rounded-full border px-3 py-1.5 text-xs whitespace-nowrap transition {selectedId === g.id ? 'border-orange-500 bg-orange-500/10 text-orange-300' : 'border-neutral-800 text-neutral-400 hover:bg-neutral-900'}"
+          >
+            {g.away_team} @ {g.home_team}
+          </button>
+        {/each}
+      </div>
     </div>
   </div>
 {/if}

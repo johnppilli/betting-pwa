@@ -25,3 +25,15 @@ body {
 
 .safe-top { padding-top: env(safe-area-inset-top); }
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+/* Hide the scrollbar visually but keep the scroll behavior.
+   Needed because macOS / Chrome sometimes always show scrollbars. */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Right-edge fade hint: suggests there's more content to scroll to.
+   Applied as a mask on the container of a horizontal scrollable row. */
+.fade-right {
+  -webkit-mask-image: linear-gradient(to right, black 92%, transparent 100%);
+  mask-image: linear-gradient(to right, black 92%, transparent 100%);
+}
