@@ -2,6 +2,7 @@
   import { fetchNbaOdds, fetchNbaEventProps, type OddsEvent } from '../lib/api/odds';
   import { getCached, setCached, cacheAge } from '../lib/api/cache';
   import { americanOdds, tipoffTime, shortAge } from '../lib/format';
+  import { consensusProbabilities, favoredSide, pct } from '../lib/predict/probability';
 
   const GAMES_CACHE = 'nba-odds';
   const TTL_MS = 10 * 60 * 1000;
@@ -22,9 +23,12 @@
 
   interface PropLine {
     stat: string;
+    marketKey: string;
     line: number;
     over: number;
     under: number;
+    favored: 'Over' | 'Under' | null;
+    favoredProb: number | null;
   }
   interface Player {
     name: string;
@@ -82,34 +86,63 @@
     if (!event) return [];
     const players: Record<string, Player> = {};
 
-    for (const bk of event.bookmakers) {
-      for (const m of bk.markets) {
-        const stat = STAT_LABELS[m.key];
-        if (!stat) continue;
+    for (const marketKey of Object.keys(STAT_LABELS)) {
+      const stat = STAT_LABELS[marketKey];
+      const entries = consensusProbabilities(event, marketKey);
 
-        const pairs: Record<string, { line: number; over?: number; under?: number }> = {};
-        for (const o of m.outcomes) {
-          const player = o.description || o.name;
-          const point = o.point ?? 0;
-          const key = `${player}|${point}`;
-          if (!pairs[key]) pairs[key] = { line: point };
-          if (o.name === 'Over') pairs[key].over = o.price;
-          else if (o.name === 'Under') pairs[key].under = o.price;
-        }
-        for (const key in pairs) {
-          const [player] = key.split('|');
-          const entry = pairs[key];
-          if (entry.over === undefined || entry.under === undefined) continue;
-          if (!players[player]) players[player] = { name: player, lines: [] };
-          players[player].lines.push({
-            stat, line: entry.line, over: entry.over, under: entry.under
-          });
+      // Pair up by (description, point): each pair has Over + Under entries.
+      const grouped: Record<string, typeof entries> = {};
+      for (const e of entries) {
+        const k = `${e.description ?? ''}|${e.point ?? ''}`;
+        if (!grouped[k]) grouped[k] = [];
+        grouped[k].push(e);
+      }
+
+      // Pull display prices from the first bookmaker that offers this market
+      const firstBookMarket = event.bookmakers
+        .map((bk) => bk.markets.find((m) => m.key === marketKey))
+        .find((m) => m);
+      const priceMap: Record<string, number> = {};
+      if (firstBookMarket) {
+        for (const o of firstBookMarket.outcomes) {
+          priceMap[`${o.name}|${o.point ?? ''}|${o.description ?? ''}`] = o.price;
         }
       }
-      if (Object.keys(players).length > 0) break;
+
+      for (const groupKey in grouped) {
+        const pair = grouped[groupKey];
+        if (pair.length < 2) continue;
+        const over = pair.find((p) => p.name === 'Over');
+        const under = pair.find((p) => p.name === 'Under');
+        if (!over || !under) continue;
+        const player = over.description ?? '';
+        if (!player) continue;
+
+        const fav = favoredSide(pair);
+        const favSide: 'Over' | 'Under' | null = fav?.name === 'Over' ? 'Over' : fav?.name === 'Under' ? 'Under' : null;
+
+        const overPrice = priceMap[`Over|${over.point ?? ''}|${player}`] ?? 0;
+        const underPrice = priceMap[`Under|${under.point ?? ''}|${player}`] ?? 0;
+
+        if (!players[player]) players[player] = { name: player, lines: [] };
+        players[player].lines.push({
+          stat,
+          marketKey,
+          line: over.point ?? 0,
+          over: overPrice,
+          under: underPrice,
+          favored: favSide,
+          favoredProb: fav?.prob ?? null
+        });
+      }
     }
 
-    return Object.values(players).sort((a, b) => a.name.localeCompare(b.name));
+    return Object.values(players)
+      .map((p) => ({
+        ...p,
+        lines: p.lines.sort((a, b) => (b.favoredProb ?? 0) - (a.favoredProb ?? 0))
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   let players = $derived(groupByPlayer(propsEvent));
@@ -170,13 +203,16 @@
                 {line.stat}
                 <span class="ml-1 text-neutral-200">{line.line}</span>
               </span>
-              <div class="flex gap-2">
-                <span class="rounded-md bg-neutral-800 px-2 py-1 text-neutral-300">
+              <div class="flex items-center gap-2">
+                <span class="rounded-md px-2 py-1 {line.favored === 'Over' ? 'bg-orange-500/15 text-orange-200 ring-1 ring-orange-500/30' : 'bg-neutral-800 text-neutral-300'}">
                   O <span class="ml-1 text-neutral-500">{americanOdds(line.over)}</span>
                 </span>
-                <span class="rounded-md bg-neutral-800 px-2 py-1 text-neutral-300">
+                <span class="rounded-md px-2 py-1 {line.favored === 'Under' ? 'bg-orange-500/15 text-orange-200 ring-1 ring-orange-500/30' : 'bg-neutral-800 text-neutral-300'}">
                   U <span class="ml-1 text-neutral-500">{americanOdds(line.under)}</span>
                 </span>
+                {#if line.favoredProb !== null}
+                  <span class="ml-1 font-mono text-orange-300">{pct(line.favoredProb)}</span>
+                {/if}
               </div>
             </div>
           {/each}

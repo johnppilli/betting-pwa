@@ -2,6 +2,7 @@
   import { fetchNbaOdds, type OddsEvent, type Outcome } from '../lib/api/odds';
   import { getCached, setCached, cacheAge } from '../lib/api/cache';
   import { americanOdds, signedPoint, tipoffTime, teamAbbr, shortAge } from '../lib/format';
+  import { favoredOutcome, pct } from '../lib/predict/probability';
 
   const CACHE_KEY = 'nba-odds';
   const TTL_MS = 10 * 60 * 1000;
@@ -94,11 +95,27 @@
   <section class="space-y-3">
     {#each games as game (game.id)}
       {@const total = totalLine(game)}
+      {@const mlPick = favoredOutcome(game, 'h2h')}
+      {@const spreadPick = favoredOutcome(game, 'spreads')}
+      {@const totalPick = favoredOutcome(game, 'totals')}
       <article class="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4">
         <div class="mb-3 flex items-center justify-between text-xs text-neutral-500">
           <span>{tipoffTime(game.commence_time)}</span>
           <span>{game.bookmakers[0]?.title ?? '—'}</span>
         </div>
+
+        {#if mlPick}
+          <div class="mb-3 flex items-center justify-between rounded-xl bg-orange-500/10 px-3 py-2 ring-1 ring-orange-500/30">
+            <div class="text-xs">
+              <span class="text-orange-300/70">Pick</span>
+              <span class="ml-2 font-medium text-orange-200">{teamAbbr(mlPick.name)} ML</span>
+            </div>
+            <span class="rounded-md bg-orange-500/20 px-2 py-0.5 font-mono text-xs font-medium text-orange-200">
+              {pct(mlPick.prob)}
+            </span>
+          </div>
+        {/if}
+
         <div class="space-y-2">
           {#each [game.away_team, game.home_team] as team}
             {@const spread = spreadFor(game, team)}
@@ -127,6 +144,29 @@
             <div class="mt-2 flex items-center justify-between border-t border-neutral-800 pt-2 text-xs">
               <span class="text-neutral-500">Total</span>
               <span class="rounded-md bg-neutral-800 px-2 py-1 text-neutral-200">O/U {total}</span>
+            </div>
+          {/if}
+
+          {#if spreadPick || totalPick}
+            <div class="mt-3 grid grid-cols-2 gap-2 border-t border-neutral-800 pt-3 text-xs">
+              {#if spreadPick}
+                <div class="rounded-lg bg-neutral-800/60 px-2 py-1.5">
+                  <p class="text-neutral-500">Spread lean</p>
+                  <p class="mt-0.5 text-neutral-200">
+                    {teamAbbr(spreadPick.name)} {signedPoint(spreadPick.point)}
+                    <span class="ml-1 text-orange-300">{pct(spreadPick.prob)}</span>
+                  </p>
+                </div>
+              {/if}
+              {#if totalPick}
+                <div class="rounded-lg bg-neutral-800/60 px-2 py-1.5">
+                  <p class="text-neutral-500">Total lean</p>
+                  <p class="mt-0.5 text-neutral-200">
+                    {totalPick.name} {totalPick.point}
+                    <span class="ml-1 text-orange-300">{pct(totalPick.prob)}</span>
+                  </p>
+                </div>
+              {/if}
             </div>
           {/if}
         </div>

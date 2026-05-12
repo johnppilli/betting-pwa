@@ -4,7 +4,7 @@
   const tabs = [
     { path: '/', label: 'Games', icon: 'games' },
     { path: '/props', label: 'Props', icon: 'props' },
-    { path: '/picks', label: 'My Picks', icon: 'picks' },
+    { path: '/picks', label: 'Top Picks', icon: 'picks' },
     { path: '/settings', label: 'Settings', icon: 'settings' }
   ];
 </script>
