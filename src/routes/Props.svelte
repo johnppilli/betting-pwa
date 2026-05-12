@@ -5,6 +5,7 @@
   import { consensusProbabilities, favoredSide, pct } from '../lib/predict/probability';
   import { findPlayerId, fetchRecentStats, type BdlStat } from '../lib/api/stats';
   import { modelProbability } from '../lib/predict/playerModel';
+  import { fetchNbaInjuries, findInjury, injuryUI, type InjuryAthlete } from '../lib/api/injuries';
   import { statTheme } from '../lib/statColors';
   import PropPlayerSkeleton from '../lib/components/PropPlayerSkeleton.svelte';
 
@@ -18,6 +19,7 @@
   let error = $state<string | null>(null);
   let updatedAgo = $state<number | null>(null);
   let playerStats = $state<Record<string, BdlStat[]>>({});
+  let injuries = $state<InjuryAthlete[]>([]);
 
   const STAT_LABELS: Record<string, string> = {
     player_points: 'Points',
@@ -44,6 +46,12 @@
   async function loadGames() {
     loading = true;
     error = null;
+    // injuries load in the background — never blocks the main flow
+    fetchNbaInjuries()
+      .then((data) => (injuries = data))
+      .catch(() => {
+        // ESPN endpoint occasionally hiccups; safe to skip
+      });
     try {
       let g = getCached<OddsEvent[]>(GAMES_CACHE, TTL_MS);
       if (!g) {
@@ -269,13 +277,23 @@
 {:else if propsEvent}
   <section class="space-y-4">
     {#each players as player (player.name)}
+      {@const injury = findInjury(injuries, player.name)}
+      {@const injUI = injury ? injuryUI(injury.status) : null}
       <article class="overflow-hidden rounded-2xl border border-neutral-800 bg-gradient-to-b from-neutral-900/80 to-neutral-900/40">
         <!-- Player header -->
         <div class="flex items-center gap-3 border-b border-neutral-800/60 px-4 py-3">
           <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-xs font-bold text-neutral-300">
             {initials(player.name)}
           </div>
-          <h2 class="truncate text-sm font-semibold text-neutral-100">{player.name}</h2>
+          <h2 class="flex-1 truncate text-sm font-semibold text-neutral-100">{player.name}</h2>
+          {#if injUI}
+            <span
+              class="shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold tracking-wider ring-1 {injUI.classes}"
+              title={injury?.shortComment ?? injury?.status}
+            >
+              {injUI.label}
+            </span>
+          {/if}
         </div>
 
         <!-- Lines (one per stat) -->

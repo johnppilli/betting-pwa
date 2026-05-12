@@ -4,7 +4,20 @@
   import { consensusProbabilities, favoredSide, pct } from '../lib/predict/probability';
   import { signedPoint, tipoffTime, teamAbbr, shortAge } from '../lib/format';
   import { settings } from '../lib/settings';
+  import {
+    savedPicks,
+    togglePick,
+    markResult,
+    clearResult,
+    deletePick,
+    makePickId,
+    isSaved,
+    pickStats,
+    type SavedPick
+  } from '../lib/tracking';
   import PickRowSkeleton from '../lib/components/PickRowSkeleton.svelte';
+  import AnimatedPercent from '../lib/components/AnimatedPercent.svelte';
+  import SaveButton from '../lib/components/SaveButton.svelte';
 
   const GAMES_CACHE = 'nba-odds';
   const TTL_MS = 10 * 60 * 1000;
@@ -173,6 +186,21 @@
       default: return 'border-l-neutral-700';
     }
   }
+
+  let stats = $derived(pickStats($savedPicks));
+
+  function toggleSave(p: Pick) {
+    togglePick({
+      id: makePickId(p.eventId, p.kind, p.description),
+      eventId: p.eventId,
+      kind: p.kind,
+      kindLabel: p.kindLabel,
+      description: p.description,
+      matchup: p.matchup,
+      tipoff: p.tipoff,
+      prob: p.prob
+    });
+  }
 </script>
 
 <header class="mb-4">
@@ -182,6 +210,96 @@
     <p class="mt-1 text-xs text-neutral-600">Updated {shortAge(updatedAgo)}</p>
   {/if}
 </header>
+
+<!-- Your record stats -->
+{#if stats.total > 0}
+  <div class="mb-4 grid grid-cols-3 gap-2 rounded-2xl border border-neutral-800 bg-gradient-to-br from-neutral-900/80 to-neutral-900/40 p-3">
+    <div class="text-center">
+      <p class="text-[10px] uppercase tracking-wider text-neutral-500">Record</p>
+      <p class="mt-0.5 font-mono text-lg font-semibold text-neutral-100">
+        {stats.hits}<span class="text-neutral-500">-</span>{stats.misses}
+      </p>
+    </div>
+    <div class="text-center">
+      <p class="text-[10px] uppercase tracking-wider text-neutral-500">Accuracy</p>
+      <p class="mt-0.5 font-mono text-lg font-semibold {stats.resolved === 0 ? 'text-neutral-500' : stats.accuracy >= 0.55 ? 'text-emerald-300' : stats.accuracy >= 0.5 ? 'text-orange-300' : 'text-rose-300'}">
+        {stats.resolved === 0 ? '—' : Math.round(stats.accuracy * 100) + '%'}
+      </p>
+    </div>
+    <div class="text-center">
+      <p class="text-[10px] uppercase tracking-wider text-neutral-500">Pending</p>
+      <p class="mt-0.5 font-mono text-lg font-semibold text-neutral-100">{stats.pending}</p>
+    </div>
+  </div>
+{/if}
+
+<!-- Saved picks -->
+{#if $savedPicks.length > 0}
+  <section class="mb-5">
+    <h2 class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+      Your saved picks · {$savedPicks.length}
+    </h2>
+    <div class="space-y-2">
+      {#each $savedPicks as p (p.id)}
+        <article class="rounded-xl border border-l-4 border-neutral-800 bg-gradient-to-r from-neutral-900/80 to-neutral-900/40 p-3 {kindAccent(p.kind)}">
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <div class="mb-0.5 flex items-center gap-2 text-[10px] uppercase tracking-wider">
+                <span class="text-neutral-400">{p.kindLabel}</span>
+                {#if p.result === 'hit'}
+                  <span class="rounded bg-emerald-500/20 px-1.5 py-px font-semibold text-emerald-300 ring-1 ring-emerald-500/40">✓ Hit</span>
+                {:else if p.result === 'miss'}
+                  <span class="rounded bg-rose-500/20 px-1.5 py-px font-semibold text-rose-300 ring-1 ring-rose-500/40">✗ Miss</span>
+                {/if}
+              </div>
+              <p class="truncate text-sm font-medium text-neutral-100">{p.description}</p>
+              <p class="mt-0.5 text-[11px] text-neutral-500">
+                {p.matchup}
+                <span class="mx-1">·</span>
+                {p.tipoff}
+                <span class="mx-1">·</span>
+                <span class="font-mono">{pct(p.prob)}</span>
+              </p>
+            </div>
+          </div>
+
+          <!-- Action buttons -->
+          <div class="mt-2 flex items-center gap-1.5 border-t border-neutral-800/60 pt-2">
+            {#if p.result === 'pending'}
+              <button
+                onclick={() => markResult(p.id, 'hit')}
+                class="flex-1 rounded-md bg-emerald-500/15 px-2 py-1.5 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/30 transition hover:bg-emerald-500/25"
+              >
+                ✓ Hit
+              </button>
+              <button
+                onclick={() => markResult(p.id, 'miss')}
+                class="flex-1 rounded-md bg-rose-500/15 px-2 py-1.5 text-xs font-semibold text-rose-300 ring-1 ring-rose-500/30 transition hover:bg-rose-500/25"
+              >
+                ✗ Miss
+              </button>
+            {:else}
+              <button
+                onclick={() => clearResult(p.id)}
+                class="flex-1 rounded-md bg-neutral-800 px-2 py-1.5 text-xs text-neutral-300 transition hover:bg-neutral-700"
+              >
+                Undo
+              </button>
+            {/if}
+            <button
+              onclick={() => deletePick(p.id)}
+              class="rounded-md bg-neutral-800/60 px-2 py-1.5 text-xs text-neutral-500 transition hover:bg-neutral-800 hover:text-neutral-300"
+              title="Remove from saved"
+              aria-label="Remove"
+            >
+              🗑
+            </button>
+          </div>
+        </article>
+      {/each}
+    </div>
+  </section>
+{/if}
 
 {#if loading}
   <section class="space-y-2">
@@ -200,8 +318,15 @@
     <p class="mt-1 text-xs text-neutral-600">Most markets are within the bookmaker's vig — check back closer to tip-off.</p>
   </div>
 {:else}
+  {#if $savedPicks.length > 0}
+    <h2 class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+      Today's picks · model-generated
+    </h2>
+  {/if}
   <section class="space-y-2">
     {#each picks as p, i (p.eventId + p.kindLabel + p.description + i)}
+      {@const pickId = makePickId(p.eventId, p.kind, p.description)}
+      {@const saved = isSaved($savedPicks, pickId)}
       <article class="rounded-xl border border-l-4 border-neutral-800 bg-gradient-to-r from-neutral-900/80 to-neutral-900/40 p-3 {kindAccent(p.kind)}">
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0 flex-1">
@@ -218,11 +343,15 @@
               {p.tipoff}
             </p>
           </div>
-          <div class="shrink-0 text-right">
-            <div class="font-mono text-xl font-bold leading-none {p.prob >= 0.7 ? 'text-emerald-300' : p.prob >= 0.6 ? 'text-orange-300' : 'text-neutral-300'}">
-              {pct(p.prob)}
+          <div class="flex shrink-0 items-center gap-1">
+            <div class="text-right">
+              <AnimatedPercent
+                value={p.prob}
+                class="font-mono text-xl font-bold leading-none {p.prob >= 0.7 ? 'text-emerald-300' : p.prob >= 0.6 ? 'text-orange-300' : 'text-neutral-300'}"
+              />
+              <p class="mt-1 text-[9px] uppercase tracking-wider text-neutral-500">confidence</p>
             </div>
-            <p class="mt-1 text-[9px] uppercase tracking-wider text-neutral-500">confidence</p>
+            <SaveButton {saved} onclick={() => toggleSave(p)} />
           </div>
         </div>
       </article>
