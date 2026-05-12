@@ -4,7 +4,7 @@
   import { getCached, setCached, cacheAge } from '../lib/api/cache';
   import { americanOdds, signedPoint, tipoffTime, teamAbbr, shortAge } from '../lib/format';
   import { favoredOutcome, pct } from '../lib/predict/probability';
-  import { teamColors, matchupGradient } from '../lib/teams';
+  import { teamColors, matchupGradient, teamLogo } from '../lib/teams';
   import { fetchNbaInjuries, injuryUI, type InjuryAthlete } from '../lib/api/injuries';
   import { savedPicks, togglePick, makePickId, isSaved } from '../lib/tracking';
   import GameCardSkeleton from '../lib/components/GameCardSkeleton.svelte';
@@ -229,8 +229,14 @@
             {@const ml = mlFor(game, team)}
             {@const c = teamColors(team)}
             <div class="flex items-center justify-between">
-              <div class="flex items-center gap-3">
-                <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style="background: {c.primary}"></span>
+              <div class="flex items-center gap-2.5">
+                <img
+                  src={teamLogo(team)}
+                  alt=""
+                  loading="lazy"
+                  class="h-6 w-6 shrink-0 object-contain"
+                  onerror={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'; }}
+                />
                 <span class="inline-block w-10 font-mono text-xs text-neutral-500">{teamAbbr(team)}</span>
                 <span class="text-sm text-neutral-200">{team}</span>
               </div>
@@ -308,7 +314,7 @@
                 </p>
                 <div class="flex items-center justify-between rounded-xl bg-neutral-900/70 px-4 py-3 ring-1 ring-neutral-800">
                   <div class="flex items-center gap-2">
-                    <span class="inline-block h-2.5 w-2.5 rounded-full" style="background: {teamColors(game.away_team).primary}"></span>
+                    <img src={teamLogo(game.away_team)} alt="" loading="lazy" class="h-7 w-7 shrink-0 object-contain" />
                     <span class="text-sm text-neutral-200">{teamAbbr(game.away_team)}</span>
                   </div>
                   <div class="font-mono text-lg font-bold text-neutral-100">
@@ -316,7 +322,7 @@
                   </div>
                   <div class="flex items-center gap-2">
                     <span class="text-sm text-neutral-200">{teamAbbr(game.home_team)}</span>
-                    <span class="inline-block h-2.5 w-2.5 rounded-full" style="background: {teamColors(game.home_team).primary}"></span>
+                    <img src={teamLogo(game.home_team)} alt="" loading="lazy" class="h-7 w-7 shrink-0 object-contain" />
                   </div>
                 </div>
                 <p class="mt-1.5 text-[10px] text-neutral-600">

@@ -6,6 +6,7 @@
   import { findPlayerId, fetchRecentStats, type BdlStat } from '../lib/api/stats';
   import { modelProbability } from '../lib/predict/playerModel';
   import { fetchNbaInjuries, findInjury, injuryUI, type InjuryAthlete } from '../lib/api/injuries';
+  import { getMatchupPlayers, playerHeadshot, type EspnPlayer } from '../lib/api/espnPlayers';
   import { statTheme } from '../lib/statColors';
   import PropPlayerSkeleton from '../lib/components/PropPlayerSkeleton.svelte';
 
@@ -20,6 +21,7 @@
   let updatedAgo = $state<number | null>(null);
   let playerStats = $state<Record<string, BdlStat[]>>({});
   let injuries = $state<InjuryAthlete[]>([]);
+  let espnRoster = $state<Record<string, EspnPlayer>>({});
 
   const STAT_LABELS: Record<string, string> = {
     player_points: 'Points',
@@ -81,6 +83,12 @@
       propsEvent = p;
       updatedAgo = cacheAge(cacheKey);
       loadAllPlayerStats(p);
+      // Fetch ESPN rosters for the two teams (used for player headshots)
+      getMatchupPlayers(p.home_team, p.away_team)
+        .then((map) => (espnRoster = map))
+        .catch(() => {
+          // not critical — falls back to initials avatar
+        });
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load props';
     } finally {
@@ -279,11 +287,21 @@
     {#each players as player (player.name)}
       {@const injury = findInjury(injuries, player.name)}
       {@const injUI = injury ? injuryUI(injury.status) : null}
+      {@const headshot = playerHeadshot(espnRoster, player.name)}
       <article class="overflow-hidden rounded-2xl border border-neutral-800 bg-gradient-to-b from-neutral-900/80 to-neutral-900/40">
         <!-- Player header -->
         <div class="flex items-center gap-3 border-b border-neutral-800/60 px-4 py-3">
-          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-xs font-bold text-neutral-300">
-            {initials(player.name)}
+          <div class="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-neutral-800 text-xs font-bold text-neutral-300">
+            <span class="absolute">{initials(player.name)}</span>
+            {#if headshot}
+              <img
+                src={headshot}
+                alt=""
+                loading="lazy"
+                class="relative h-full w-full object-cover"
+                onerror={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+              />
+            {/if}
           </div>
           <h2 class="flex-1 truncate text-sm font-semibold text-neutral-100">{player.name}</h2>
           {#if injUI}
