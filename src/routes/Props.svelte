@@ -5,6 +5,7 @@
   import { consensusProbabilities, favoredSide, pct } from '../lib/predict/probability';
   import { findPlayerId, fetchRecentStats, type BdlStat } from '../lib/api/stats';
   import { modelProbability } from '../lib/predict/playerModel';
+  import { statTheme } from '../lib/statColors';
   import PropPlayerSkeleton from '../lib/components/PropPlayerSkeleton.svelte';
 
   const GAMES_CACHE = 'nba-odds';
@@ -16,8 +17,6 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let updatedAgo = $state<number | null>(null);
-  // Background-fetched balldontlie stats per player name. Populated as
-  // requests resolve. Missing key = not loaded; empty array = no data found.
   let playerStats = $state<Record<string, BdlStat[]>>({});
 
   const STAT_LABELS: Record<string, string> = {
@@ -26,6 +25,7 @@
     player_assists: 'Assists',
     player_threes: 'Threes'
   };
+  const STAT_ORDER = ['player_points', 'player_rebounds', 'player_assists', 'player_threes'];
 
   interface PropLine {
     stat: string;
@@ -72,9 +72,6 @@
       }
       propsEvent = p;
       updatedAgo = cacheAge(cacheKey);
-      // Kick off background stats fetches for every player in the props.
-      // Runs in parallel; if balldontlie rate-limits some, those just won't
-      // show a Model badge — the Market badge still works.
       loadAllPlayerStats(p);
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load props';
@@ -92,7 +89,6 @@
         }
       }
     }
-
     await Promise.allSettled(
       [...names].map(async (name) => {
         try {
@@ -101,7 +97,7 @@
           const stats = await fetchRecentStats(id);
           playerStats = { ...playerStats, [name]: stats };
         } catch {
-          // ignore per-player failures (rate limit, network) — just no Model badge
+          // per-player failures (rate limit, etc.) are silently skipped
         }
       })
     );
@@ -117,15 +113,20 @@
 
   $effect(() => { loadGames(); });
 
+  /**
+   * For each player, collect one line per stat — the "main" line, defined as
+   * the line whose favored-side probability is closest to 50% (most balanced).
+   * Sportsbooks set the main line where O/U are nearly 50/50; alt lines
+   * intentionally skew. We hide alts to reduce clutter.
+   */
   function groupByPlayer(event: OddsEvent | null): Player[] {
     if (!event) return [];
-    const players: Record<string, Player> = {};
+    const players: Record<string, { name: string; lines: Record<string, PropLine> }> = {};
 
-    for (const marketKey of Object.keys(STAT_LABELS)) {
+    for (const marketKey of STAT_ORDER) {
       const stat = STAT_LABELS[marketKey];
       const entries = consensusProbabilities(event, marketKey);
 
-      // Pair up by (description, point): each pair has Over + Under entries.
       const grouped: Record<string, typeof entries> = {};
       for (const e of entries) {
         const k = `${e.description ?? ''}|${e.point ?? ''}`;
@@ -133,7 +134,7 @@
         grouped[k].push(e);
       }
 
-      // Pull display prices from the first bookmaker that offers this market
+      // Lookup raw prices from the first bookmaker that offers this market
       const firstBookMarket = event.bookmakers
         .map((bk) => bk.markets.find((m) => m.key === marketKey))
         .find((m) => m);
@@ -155,12 +156,10 @@
 
         const fav = favoredSide(pair);
         const favSide: 'Over' | 'Under' | null = fav?.name === 'Over' ? 'Over' : fav?.name === 'Under' ? 'Under' : null;
-
         const overPrice = priceMap[`Over|${over.point ?? ''}|${player}`] ?? 0;
         const underPrice = priceMap[`Under|${under.point ?? ''}|${player}`] ?? 0;
 
-        if (!players[player]) players[player] = { name: player, lines: [] };
-        players[player].lines.push({
+        const candidate: PropLine = {
           stat,
           marketKey,
           line: over.point ?? 0,
@@ -168,22 +167,38 @@
           under: underPrice,
           favored: favSide,
           favoredProb: fav?.prob ?? null
-        });
+        };
+
+        if (!players[player]) players[player] = { name: player, lines: {} };
+        const current = players[player].lines[stat];
+        if (!current) {
+          players[player].lines[stat] = candidate;
+        } else {
+          // keep the line whose favored prob is closest to 0.5 (the main line)
+          const dCurrent = Math.abs((current.favoredProb ?? 0.5) - 0.5);
+          const dCandidate = Math.abs((candidate.favoredProb ?? 0.5) - 0.5);
+          if (dCandidate < dCurrent) {
+            players[player].lines[stat] = candidate;
+          }
+        }
       }
     }
 
     return Object.values(players)
       .map((p) => ({
-        ...p,
-        lines: p.lines.sort((a, b) => (b.favoredProb ?? 0) - (a.favoredProb ?? 0))
+        name: p.name,
+        // Order lines: Points → Rebounds → Assists → Threes
+        lines: STAT_ORDER
+          .map((mk) => Object.values(p.lines).find((l) => l.marketKey === mk))
+          .filter((l): l is PropLine => !!l)
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   let players = $derived(groupByPlayer(propsEvent));
 
-  // Model probability for the favored side, given a line + that player's stats.
-  // Returns null when we don't yet have stats or the sample is too small.
+  // Model probability for the favored side (returns null when stats not loaded
+  // or the player has too few recent games).
   function lineModelProb(
     playerName: string,
     marketKey: string,
@@ -198,11 +213,17 @@
     if (favored === 'Under') return 1 - result.pOver;
     return Math.max(result.pOver, 1 - result.pOver);
   }
+
+  function initials(name: string): string {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
 </script>
 
 <header class="mb-4">
   <h1 class="text-2xl font-semibold tracking-tight">Player Props</h1>
-  <p class="text-sm text-neutral-500">Points, rebounds, assists, threes</p>
+  <p class="text-sm text-neutral-500">Points · Rebounds · Assists · Threes</p>
   {#if updatedAgo !== null && propsEvent}
     <p class="mt-1 text-xs text-neutral-600">Updated {shortAge(updatedAgo)}</p>
   {/if}
@@ -246,39 +267,76 @@
     </p>
   </div>
 {:else if propsEvent}
-  <section class="space-y-3">
+  <section class="space-y-4">
     {#each players as player (player.name)}
-      <article class="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4">
-        <h2 class="mb-3 text-sm font-medium text-neutral-100">{player.name}</h2>
-        <div class="space-y-2">
-          {#each player.lines as line (line.stat + line.line)}
+      <article class="overflow-hidden rounded-2xl border border-neutral-800 bg-gradient-to-b from-neutral-900/80 to-neutral-900/40">
+        <!-- Player header -->
+        <div class="flex items-center gap-3 border-b border-neutral-800/60 px-4 py-3">
+          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-xs font-bold text-neutral-300">
+            {initials(player.name)}
+          </div>
+          <h2 class="truncate text-sm font-semibold text-neutral-100">{player.name}</h2>
+        </div>
+
+        <!-- Lines (one per stat) -->
+        <div class="space-y-2 p-3">
+          {#each player.lines as line (line.marketKey)}
+            {@const theme = statTheme(line.marketKey)}
             {@const modelP = lineModelProb(player.name, line.marketKey, line.line, line.favored)}
-            <div class="flex items-center justify-between text-xs">
-              <span class="text-neutral-400">
-                {line.stat}
-                <span class="ml-1 text-neutral-200">{line.line}</span>
-              </span>
-              <div class="flex items-center gap-2">
-                <span class="rounded-md px-2 py-1 {line.favored === 'Over' ? 'bg-orange-500/15 text-orange-200 ring-1 ring-orange-500/30' : 'bg-neutral-800 text-neutral-300'}">
-                  O <span class="ml-1 text-neutral-500">{americanOdds(line.over)}</span>
-                </span>
-                <span class="rounded-md px-2 py-1 {line.favored === 'Under' ? 'bg-orange-500/15 text-orange-200 ring-1 ring-orange-500/30' : 'bg-neutral-800 text-neutral-300'}">
-                  U <span class="ml-1 text-neutral-500">{americanOdds(line.under)}</span>
-                </span>
-                <div class="ml-1 flex flex-col items-end text-[10px] leading-tight">
-                  {#if line.favoredProb !== null}
-                    <span class="font-mono text-orange-300" title="Market consensus probability">
-                      Mkt {pct(line.favoredProb)}
-                    </span>
-                  {/if}
+            {@const marketAgrees =
+              modelP !== null &&
+              line.favoredProb !== null &&
+              ((modelP >= 0.5) === (line.favoredProb >= 0.5))}
+            {@const barPct = Math.round(((line.favoredProb ?? 0.5) * 100))}
+
+            <div class="rounded-xl {theme.bgSoft} p-3 ring-1 {theme.ring}">
+              <!-- Top row: stat + line, favored % -->
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <span class="text-[10px] font-bold tracking-wider uppercase {theme.text}">
+                    {line.stat}
+                  </span>
+                  <span class="ml-2 text-base font-medium text-neutral-100">{line.line}</span>
+                </div>
+                <div class="text-right">
+                  <div class="font-mono text-2xl font-bold leading-none {theme.text}">
+                    {pct(line.favoredProb ?? 0.5)}
+                  </div>
+                  <div class="mt-0.5 text-[10px] tracking-wider uppercase text-neutral-400">
+                    {line.favored ?? '—'}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Progress bar -->
+              <div class="mt-3 h-1.5 w-full overflow-hidden rounded-full {theme.bgFillTrack}">
+                <div class="h-full rounded-full {theme.bgFill}" style="width: {barPct}%"></div>
+              </div>
+
+              <!-- Bottom row: model + prices -->
+              <div class="mt-3 flex items-center justify-between text-[10px]">
+                <div class="text-neutral-500">
                   {#if modelP !== null}
-                    <span
-                      class="font-mono {modelP >= 0.55 ? 'text-cyan-300' : 'text-neutral-500'}"
-                      title="Player-stat model probability (recent games)"
-                    >
-                      Mdl {pct(modelP)}
+                    <span>Model</span>
+                    <span class="ml-1 font-mono font-medium {marketAgrees ? 'text-emerald-300' : 'text-amber-400'}">
+                      {pct(modelP)}
                     </span>
+                    {#if marketAgrees}
+                      <span class="ml-1 text-emerald-400">agrees</span>
+                    {:else}
+                      <span class="ml-1 text-amber-500">disagrees</span>
+                    {/if}
+                  {:else}
+                    <span class="text-neutral-600">Model loading…</span>
                   {/if}
+                </div>
+                <div class="flex gap-1.5">
+                  <span class="rounded bg-neutral-800/80 px-2 py-0.5 font-mono text-neutral-300">
+                    O <span class="text-neutral-500">{americanOdds(line.over)}</span>
+                  </span>
+                  <span class="rounded bg-neutral-800/80 px-2 py-0.5 font-mono text-neutral-300">
+                    U <span class="text-neutral-500">{americanOdds(line.under)}</span>
+                  </span>
                 </div>
               </div>
             </div>

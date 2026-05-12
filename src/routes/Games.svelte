@@ -102,8 +102,9 @@
       {@const mlPick = favoredOutcome(game, 'h2h')}
       {@const spreadPick = favoredOutcome(game, 'spreads')}
       {@const totalPick = favoredOutcome(game, 'totals')}
-      <article class="overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900/60">
-        <div class="h-1" style="background: {matchupGradient(game.away_team, game.home_team)}"></div>
+      {@const pickColor = mlPick ? teamColors(mlPick.name).primary : '#737373'}
+      <article class="overflow-hidden rounded-2xl border border-neutral-800 bg-gradient-to-b from-neutral-900/80 to-neutral-900/40">
+        <div class="h-1.5" style="background: {matchupGradient(game.away_team, game.home_team)}"></div>
         <div class="p-4">
         <div class="mb-3 flex items-center justify-between text-xs text-neutral-500">
           <span>{tipoffTime(game.commence_time)}</span>
@@ -111,14 +112,22 @@
         </div>
 
         {#if mlPick}
-          <div class="mb-3 flex items-center justify-between rounded-xl bg-orange-500/10 px-3 py-2 ring-1 ring-orange-500/30">
-            <div class="text-xs">
-              <span class="text-orange-300/70">Pick</span>
-              <span class="ml-2 font-medium text-orange-200">{teamAbbr(mlPick.name)} ML</span>
+          <div
+            class="mb-4 flex items-center justify-between rounded-xl px-4 py-3 ring-1"
+            style="background: color-mix(in srgb, {pickColor} 14%, transparent); --tw-ring-color: color-mix(in srgb, {pickColor} 40%, transparent);"
+          >
+            <div>
+              <p class="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">Model Pick</p>
+              <p class="mt-0.5 text-base font-semibold text-neutral-50">
+                {teamAbbr(mlPick.name)} <span class="text-neutral-400">ML</span>
+              </p>
             </div>
-            <span class="rounded-md bg-orange-500/20 px-2 py-0.5 font-mono text-xs font-medium text-orange-200">
-              {pct(mlPick.prob)}
-            </span>
+            <div class="text-right">
+              <div class="font-mono text-2xl font-bold leading-none" style="color: {pickColor}; filter: brightness(1.4) saturate(0.9);">
+                {pct(mlPick.prob)}
+              </div>
+              <p class="mt-1 text-[10px] uppercase tracking-wider text-neutral-500">to win</p>
+            </div>
           </div>
         {/if}
 

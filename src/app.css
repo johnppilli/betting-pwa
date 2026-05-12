@@ -4,10 +4,19 @@ html,
 body {
   height: 100%;
   margin: 0;
-  background-color: #0a0a0a;
   color: #fafafa;
   -webkit-font-smoothing: antialiased;
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+body {
+  /* Subtle ambient glow — orange at top, cyan at bottom — over near-black base.
+     Barely visible but adds depth instead of a flat dark void. */
+  background:
+    radial-gradient(1000px circle at 50% -200px, rgba(249, 115, 22, 0.06), transparent 60%),
+    radial-gradient(900px circle at 50% 110%, rgba(34, 211, 238, 0.04), transparent 60%),
+    #070707;
+  background-attachment: fixed;
 }
 
 #app {

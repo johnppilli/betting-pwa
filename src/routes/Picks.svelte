@@ -155,6 +155,24 @@
     if (prob >= 0.6) return 'bg-orange-500/15 text-orange-300 ring-orange-500/30';
     return 'bg-neutral-800 text-neutral-300 ring-neutral-700';
   }
+
+  // Tier label + small icon-glyph for the leading line of each pick
+  function tierLabel(prob: number): string {
+    if (prob >= 0.7) return 'Strong';
+    if (prob >= 0.6) return 'Lean';
+    return 'Edge';
+  }
+
+  function kindAccent(kind: string): string {
+    // Subtle left-border stripe color per pick type
+    switch (kind) {
+      case 'h2h': return 'border-l-rose-500/60';
+      case 'spread': return 'border-l-orange-500/60';
+      case 'total': return 'border-l-sky-500/60';
+      case 'prop': return 'border-l-violet-500/60';
+      default: return 'border-l-neutral-700';
+    }
+  }
 </script>
 
 <header class="mb-4">
@@ -184,27 +202,34 @@
 {:else}
   <section class="space-y-2">
     {#each picks as p, i (p.eventId + p.kindLabel + p.description + i)}
-      <article class="rounded-xl border border-neutral-800 bg-neutral-900/60 p-3">
-        <div class="flex items-start justify-between gap-3">
+      <article class="rounded-xl border border-l-4 border-neutral-800 bg-gradient-to-r from-neutral-900/80 to-neutral-900/40 p-3 {kindAccent(p.kind)}">
+        <div class="flex items-center justify-between gap-3">
           <div class="min-w-0 flex-1">
-            <p class="truncate text-sm text-neutral-100">{p.description}</p>
-            <p class="mt-0.5 text-xs text-neutral-500">
+            <div class="mb-0.5 flex items-center gap-2 text-[10px] uppercase tracking-wider">
               <span class="text-neutral-400">{p.kindLabel}</span>
-              <span class="mx-1">·</span>
+              <span class="rounded {badgeColor(p.prob)} px-1.5 py-px font-semibold ring-1">
+                {tierLabel(p.prob)}
+              </span>
+            </div>
+            <p class="truncate text-sm font-medium text-neutral-100">{p.description}</p>
+            <p class="mt-0.5 text-[11px] text-neutral-500">
               {p.matchup}
               <span class="mx-1">·</span>
               {p.tipoff}
             </p>
           </div>
-          <span class="shrink-0 rounded-md px-2 py-1 font-mono text-xs font-medium ring-1 {badgeColor(p.prob)}">
-            {pct(p.prob)}
-          </span>
+          <div class="shrink-0 text-right">
+            <div class="font-mono text-xl font-bold leading-none {p.prob >= 0.7 ? 'text-emerald-300' : p.prob >= 0.6 ? 'text-orange-300' : 'text-neutral-300'}">
+              {pct(p.prob)}
+            </div>
+            <p class="mt-1 text-[9px] uppercase tracking-wider text-neutral-500">confidence</p>
+          </div>
         </div>
       </article>
     {/each}
   </section>
 
   <p class="mt-4 text-center text-xs text-neutral-600">
-    Probabilities are vig-adjusted consensus across all bookmakers for the market.
+    Vig-adjusted consensus across all bookmakers.
   </p>
 {/if}
