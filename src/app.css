@@ -2,27 +2,17 @@
 
 html,
 body {
-	height: 100%;
-	margin: 0;
-	background-color: #0a0a0a;
-	color: #fafafa;
-	-webkit-font-smoothing: antialiased;
-	font-family:
-		ui-sans-serif,
-		system-ui,
-		-apple-system,
-		BlinkMacSystemFont,
-		'Segoe UI',
-		sans-serif;
+  height: 100%;
+  margin: 0;
+  background-color: #0a0a0a;
+  color: #fafafa;
+  -webkit-font-smoothing: antialiased;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 #app {
-	min-height: 100dvh;
+  min-height: 100dvh;
 }
 
-.safe-top {
-	padding-top: env(safe-area-inset-top);
-}
-.safe-bottom {
-	padding-bottom: env(safe-area-inset-bottom);
-}
+.safe-top { padding-top: env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
