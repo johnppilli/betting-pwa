@@ -7,8 +7,11 @@
   import { modelProbability } from '../lib/predict/playerModel';
   import { fetchNbaInjuries, findInjury, injuryUI, type InjuryAthlete } from '../lib/api/injuries';
   import { getMatchupPlayers, playerHeadshot, type EspnPlayer } from '../lib/api/espnPlayers';
+  import { savedPicks, togglePick, makePickId, isSaved } from '../lib/tracking';
+  import { teamAbbr } from '../lib/format';
   import { statTheme } from '../lib/statColors';
   import PropPlayerSkeleton from '../lib/components/PropPlayerSkeleton.svelte';
+  import SaveButton from '../lib/components/SaveButton.svelte';
 
   const GAMES_CACHE = 'nba-odds';
   const TTL_MS = 10 * 60 * 1000;
@@ -334,6 +337,9 @@
               line.favoredProb !== null &&
               ((modelP >= 0.5) === (line.favoredProb >= 0.5))}
             {@const barPct = Math.round(((line.favoredProb ?? 0.5) * 100))}
+            {@const propDesc = `${player.name} • ${line.stat} ${line.line} ${line.favored ?? 'Over'}`}
+            {@const propId = makePickId(propsEvent.id, 'prop', propDesc)}
+            {@const propSaved = isSaved($savedPicks, propId)}
 
             <div class="rounded-xl {theme.bgSoft} p-3 ring-1 {theme.ring}">
               <!-- Top row: stat + line, favored % -->
@@ -344,13 +350,31 @@
                   </span>
                   <span class="ml-2 text-base font-medium text-neutral-100">{line.line}</span>
                 </div>
-                <div class="text-right">
-                  <div class="font-mono text-2xl font-bold leading-none {theme.text}">
-                    {pct(line.favoredProb ?? 0.5)}
+                <div class="flex items-start gap-1">
+                  <div class="text-right">
+                    <div class="font-mono text-2xl font-bold leading-none {theme.text}">
+                      {pct(line.favoredProb ?? 0.5)}
+                    </div>
+                    <div class="mt-0.5 text-[10px] tracking-wider uppercase text-neutral-400">
+                      {line.favored ?? '—'}
+                    </div>
                   </div>
-                  <div class="mt-0.5 text-[10px] tracking-wider uppercase text-neutral-400">
-                    {line.favored ?? '—'}
-                  </div>
+                  {#if line.favoredProb !== null && line.favored}
+                    <SaveButton
+                      saved={propSaved}
+                      onclick={() =>
+                        togglePick({
+                          id: propId,
+                          eventId: propsEvent.id,
+                          kind: 'prop',
+                          kindLabel: line.stat,
+                          description: propDesc,
+                          matchup: `${teamAbbr(propsEvent.away_team)} @ ${teamAbbr(propsEvent.home_team)}`,
+                          tipoff: tipoffTime(propsEvent.commence_time),
+                          prob: line.favoredProb
+                        })}
+                    />
+                  {/if}
                 </div>
               </div>
 
